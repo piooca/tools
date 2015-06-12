@@ -1,0 +1,55 @@
+#"Funkció","Szállítási protokoll","Forráscím:forrásport","Célcím:célport"
+
+#define A = 10.0.0.0/8
+#define B = 172.16.0.0/16
+#define C = 192.168.0.0/16
+
+
+# a Kozp, Internet, Vegek, VPN es Telep "feloldodnak" a forras oldalon, de cel oldalon tilos hasznalni oket
+# azert kellenek, hogy el tudja magarol donteni a futtato kiszolgalo, hogy melyik szabalyt ellenorizze
+define Kozp = http://myserver.local/configuration/fw_rules/kozp_list.txt
+define Internet = '62.77.229.162', '213.163.48.62'
+define Vegek = http://myserver.local/configuration/fw_rules/vegek_list.txt
+define VPN = http://myserver.local/configuration/fw_rules/vpn_list.txt
+define Telep = http://myserver.local/configuration/fw_rules/telep_list.txt
+
+# ezek a definiciok pedig a cel oldalon oldodnak fel
+define servA* = 10.0.0.20, 10.0.0.21, 10.0.0.22, 10.0.0.23, 10.0.0.24
+define servB* = 10.0.0.76, 10.0.0.77
+
+# egy halozat ellenorzesekor ertelemszeruen nem probaljuk minden
+# node-ot elerni, csak azokat, amelyekrol tudjuk, hogy elerhetoek
+define 62.77.229.160/28 = 62.77.229.163
+define 82.141.135.128/29 = 82.141.135.131
+
+#TODO ellenorizhetetlen szabalyok eseten (pl.: =>[Telep:]) random gepeket kell ellenorizni abbol a tartomanybol?
+[Kozp]=>[Kozp] # => ez ellenorizhetetlen #Központi kiszolgálók egymás közötti elérése TCP+UDP
+[Vegek]=>[Telep] # => ez ellenorizhetetlen #Végek hálózati tartományán belül futó szolgáltatások elérése TCP+UDP
+
+##VPN tartományból történő elérés				
+[VPN]=>[Kozp:22,80,443] #Központi kiszolgálók távoli elérése HTTP, HTTPS es SSH
+
+[VPN]=>[172.16.0.1:80,443,902,903,9443] #vCenter szerver elérese, vSphere Client elérés, távoli konzol, VMware webes kliense
+
+[VPN]=>[10.0.0.9:3389]
+,[10.0.0.5:3389]
+,[10.0.0.99:3389] #Kiszolgáló környezetben futó technikai VM távoli elérése
+
+##KEKKH központból elért Interneten futó szolgáltatások forgalmának engedélyezése				
+[hostnameA] ,[hostnameB]=>[62.77.229.160/28:80,443] ,[82.141.135.128/29:80,443] ,[www.suse.com:80,443]
+,[nu.novell.com:80,443] ,[software.opensuse.org: 80,443] ,[download.novell.com: 80, 443] ,[download.suse.com: 80, 443]
+,[dl.netiq.com: 80, 443] #Telepítési, frissítési források elérése SMT kiszolgálóról
+
+[hostnameC],[hostnameD]=>[secure-www.novell.com:443],[you.novell.com:443] #Kliensfelügyeleti rendszer frissítése
+
+##KEKKH központ és a végek közti hálózati forgalom engedélyezése
+[Kozp]=>[Telep:22,80,443] #Telephelyi kiszolgálók központból történő elérése
+
+[servA*], [hostnameA]=>[Telep:524,427,U524,U427] # NCP, SLP eDirectory szinkron és SLP a végek felé
+[servB*], [hostnameA]=>[Telep:389,636] #LDAP #eDirectory LDAP elérés a végek felé
+
+[Vegek]=>[servA*:524,427,U524,U427] #NCP, SLP #eDirectory szinkron és SLP a központ felé
+[Vegek]=>[servA*:389,636] #	LDAP #eDirectory LDAP elérés a központ felé
+
+[Telep]=>[Kozp:22] #SSH #Központ elérése a telephelyi szerverek felől
+
